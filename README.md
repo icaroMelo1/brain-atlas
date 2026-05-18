@@ -10,10 +10,12 @@ Um grafo cerebral 3D que mapeia agentes, skills, MCPs e domínios de conheciment
 
 ```
 brain-atlas/
-  Cerebro.html    # Visualizador 3D (React + Canvas2D)
-  bridge.py       # Servidor SSE (porta 8766) — recebe eventos do hook e faz fan-out para o browser
-  hook.py         # PostToolUse hook do Claude Code — mapeia tools → nós do grafo
-  start.sh        # Sobe bridge + HTTP server + abre o browser
+  brain-atlas.html  # Visualizador 3D (React + Canvas2D)
+  bridge.py         # Servidor SSE (porta 8766) — recebe eventos do hook e faz fan-out para o browser
+  hook.py           # PostToolUse hook do Claude Code — mapeia tools → nós do grafo
+  start.sh          # Sobe bridge + HTTP server + abre o browser
+  nodes.json        # Grafo: nós, links, satélites e toolMap
+  config.json       # Config local (gitignored): sourceDir, portas
 ```
 
 ## Como usar
@@ -22,7 +24,7 @@ brain-atlas/
 bash ~/projetos/pessoal/brain-atlas/start.sh
 ```
 
-Abre `http://localhost:8765/Cerebro.html` com o bridge ativo.
+Abre `http://localhost:8765/brain-atlas.html` com o bridge ativo.
 
 ### Parar
 

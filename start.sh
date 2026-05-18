@@ -41,15 +41,15 @@ for i in $(seq 1 10); do
   sleep 0.4
 done
 
-URL="http://localhost:$HTTP_PORT/Cerebro.html"
+URL="http://localhost:$HTTP_PORT/brain-atlas.html"
 echo "Abrindo $URL ..."
 open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || echo "  Abra manualmente: $URL"
 
 echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║  Brain Atlas rodando                         ║"
-echo "║  Browser  → http://localhost:$HTTP_PORT/Cerebro.html ║"
-echo "║  Bridge   → http://localhost:$BRIDGE_PORT/health     ║"
-echo "╚══════════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════╗"
+echo "║  Brain Atlas rodando                             ║"
+echo "║  Browser  → http://localhost:$HTTP_PORT/brain-atlas.html ║"
+echo "║  Bridge   → http://localhost:$BRIDGE_PORT/health         ║"
+echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "Para parar: pkill -f bridge.py && pkill -f 'http.server $HTTP_PORT'"
