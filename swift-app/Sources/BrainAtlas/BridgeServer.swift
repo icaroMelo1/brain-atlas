@@ -221,6 +221,9 @@ actor BridgeServer {
         case ("GET", "/health"):
             handleGetHealth(connection: connection)
 
+        case ("GET", let p) where p.hasPrefix("/md"):
+            handleGetMarkdown(path: path, connection: connection)
+
         default:
             sendResponse(to: connection, status: 404, body: #"{"error":"not found"}"#)
         }
@@ -357,6 +360,56 @@ actor BridgeServer {
 
     private func handleGetHealth(connection: NWConnection) {
         sendJSON(to: connection, status: 200, body: #"{"ok":true,"clients":\#(clients.count)}"#)
+    }
+
+    private func handleGetMarkdown(path: String, connection: NWConnection) {
+        // Extract ?path= query param (URL-encoded relative path)
+        guard let queryStart = path.firstIndex(of: "?"),
+              let range = path.range(of: "path=", range: queryStart..<path.endIndex) else {
+            sendJSON(to: connection, status: 400, body: #"{"error":"missing path param"}"#)
+            return
+        }
+
+        let rawEncoded = String(path[range.upperBound...])
+        guard let relativePath = rawEncoded.removingPercentEncoding else {
+            sendJSON(to: connection, status: 400, body: #"{"error":"bad encoding"}"#)
+            return
+        }
+
+        // Resolve sourceDir from config.json or UserDefaults
+        let sourceDir: String
+        if let data = try? Data(contentsOf: configURL),
+           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let dir = dict["sourceDir"] as? String, !dir.isEmpty {
+            sourceDir = (dir as NSString).expandingTildeInPath
+        } else {
+            let saved = UserDefaults.standard.string(forKey: "BrainAtlas.sourceDir") ?? ""
+            sourceDir = saved.isEmpty ? (NSHomeDirectory() + "/Documents/notes") : (saved as NSString).expandingTildeInPath
+        }
+
+        let fullPath = (sourceDir as NSString).appendingPathComponent(relativePath)
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: fullPath)) else {
+            sendPlainText(to: connection, status: 404, body: "> Arquivo não encontrado: \(relativePath)")
+            return
+        }
+
+        var headers = corsHeaders()
+        headers += [
+            "Content-Type: text/plain; charset=utf-8",
+            "Content-Length: \(data.count)"
+        ]
+        sendRaw(to: connection, status: "200 OK", headers: headers, body: data)
+    }
+
+    private func sendPlainText(to connection: NWConnection, status: Int, body: String) {
+        let bodyData = Data(body.utf8)
+        var headers = corsHeaders()
+        headers += [
+            "Content-Type: text/plain; charset=utf-8",
+            "Content-Length: \(bodyData.count)"
+        ]
+        sendRaw(to: connection, status: "\(status) \(httpStatusText(status))", headers: headers, body: bodyData)
     }
 
     // MARK: - SSE fan-out
