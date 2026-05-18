@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Menu bar only — sem ícone no Dock -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- Identidade -->
+    <key>CFBundleName</key>
+    <string>Brain Atlas</string>
+    <key>CFBundleDisplayName</key>
+    <string>Brain Atlas</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.icaromelo.brain-atlas</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>BrainAtlas</string>
+
+    <!-- macOS mínimo -->
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <!-- Permite que o app abra URLs (links externos do MdViewer) -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <!-- Permite conexão localhost para o bridge (sem HTTPS) -->
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+    <!-- Permissão de acesso a arquivos do usuário (sourceDir) -->
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>O Brain Atlas precisa ler seus arquivos .md para exibir o conteúdo dos nós.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>O Brain Atlas precisa ler seus arquivos .md para exibir o conteúdo dos nós.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>O Brain Atlas precisa ler seus arquivos .md para exibir o conteúdo dos nós.</string>
+
+    <!-- Suporte a Dark Mode -->
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    <key>NSAppearance</key>
+    <string>NSAppearanceNameDarkAqua</string>
+</dict>
+</plist>

@@ -363,9 +363,3 @@ private extension Color {
     }
 }
 
-// MARK: - Preview
-
-#Preview {
-    PreferencesView()
-        .background(Color(hex: "#0B0F19"))
-}

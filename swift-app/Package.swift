@@ -5,7 +5,7 @@ let package = Package(
     name: "BrainAtlas",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(
+        .executableTarget(
             name: "BrainAtlas",
             path: "Sources/BrainAtlas",
             resources: [
