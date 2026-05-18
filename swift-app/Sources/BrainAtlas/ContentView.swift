@@ -31,6 +31,9 @@ struct BrainWebView: NSViewRepresentable {
         webView.allowsMagnification = false
         webView.navigationDelegate = context.coordinator
 
+        // Guarda referência no Coordinator para que o JSBridge possa alcançar a view.
+        context.coordinator.webView = webView
+
         loadHTML(in: webView)
         return webView
     }
@@ -61,24 +64,35 @@ struct BrainWebView: NSViewRepresentable {
 // MARK: - Coordinator (navigation + message handlers)
 
 class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+
+    /// Referência fraca ao WKWebView gerenciado por este coordinator.
+    /// Definida em makeNSView após a criação da view.
+    weak var webView: WKWebView?
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         switch message.name {
         case "openMd":
-            // Expandido em MarkdownReaderView.swift (Fase 4)
-            if let path = message.body as? String {
-                NotificationCenter.default.post(name: .openMarkdownFile, object: path)
-            }
+            JSBridge.shared.handleOpenMd(message: message)
+
         case "bridgeEvent":
-            // Expandido em JSBridge.swift (Fase 5)
-            break
+            JSBridge.shared.handleBridgeEvent(message: message)
+
         default:
             break
         }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Injeta variável para o JS saber que está rodando dentro do app Swift
-        webView.evaluateJavaScript("window.__BRAIN_ATLAS_NATIVE__ = true;")
+        // Registra o WebView no JSBridge para que eventos SSE sejam retransmitidos via JS.
+        JSBridge.shared.register(webView: webView)
+
+        // Injeta o script de inicialização que define window.__BRAIN_ATLAS_NATIVE__
+        // e window.__onBridgeEvent__, substituindo o EventSource quando rodando nativo.
+        webView.evaluateJavaScript(JSBridge.initScript) { _, error in
+            if let error {
+                print("[ContentView] Erro ao injetar initScript: \(error)")
+            }
+        }
     }
 }
 
