@@ -1920,7 +1920,10 @@ function MdViewer({ node, onClose, httpPort }) {
     setLoading(true);
     setContent(null);
     const encoded = node.md.split('/').map(p => encodeURIComponent(p)).join('/');
-    fetch(`http://localhost:${httpPort}/${encoded}`)
+    const mdUrl = window.__BRAIN_ATLAS_NATIVE__
+      ? `http://localhost:${BRIDGE_PORT}/md?path=${encodeURIComponent(node.md)}`
+      : `http://localhost:${httpPort}/${encoded}`;
+    fetch(mdUrl)
       .then(r => r.text())
       .then(txt => { setContent(txt); setLoading(false); })
       .catch(() => { setContent('> Não foi possível carregar o arquivo.'); setLoading(false); });
