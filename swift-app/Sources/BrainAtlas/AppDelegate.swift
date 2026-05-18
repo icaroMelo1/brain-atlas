@@ -9,6 +9,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Menu bar only — sem ícone no Dock
         NSApp.setActivationPolicy(.accessory)
 
+        // Inicia o servidor embutido ANTES de abrir a janela
+        // para que o HTML consiga chamar localhost:8766 imediatamente
+        let port = AppSettings.shared.bridgePort
+        Task { await BridgeServer.shared.start(port: port) }
+
         setupMenuBar()
         openMainWindow()
         AppSettings.showOnboardingIfNeeded()
