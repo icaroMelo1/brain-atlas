@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened Runtime obrigatório para notarização -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Servidor HTTP embutido (NWListener) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Conexões de saída (SSE relay, fetch para localhost) -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Leitura de arquivos .md do sourceDir escolhido pelo usuário -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+
+    <!-- Leitura/escrita de Application Support (config.json, sessions.json) -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+</dict>
+</plist>
