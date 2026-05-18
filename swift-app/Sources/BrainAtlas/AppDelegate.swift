@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupMenuBar()
         openMainWindow()
+        AppSettings.showOnboardingIfNeeded()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
