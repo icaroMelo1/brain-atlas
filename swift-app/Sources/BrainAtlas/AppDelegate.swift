@@ -11,7 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Inicia o servidor embutido ANTES de abrir a janela
         // para que o HTML consiga chamar localhost:8766 imediatamente
-        let port = AppSettings.shared.bridgePort
+        let port = AppSettings.shared.bridgePort > 0 ? AppSettings.shared.bridgePort : 8766
         Task { await BridgeServer.shared.start(port: port) }
 
         setupMenuBar()

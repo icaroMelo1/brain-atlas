@@ -233,7 +233,6 @@ actor BridgeServer {
             "Content-Length: 0"
         ]
         sendRaw(to: connection, status: "200 OK", headers: headers, body: Data())
-        connection.cancel()
     }
 
     private func handleGetStream(connection: NWConnection) async {
@@ -284,25 +283,21 @@ actor BridgeServer {
         } else {
             sendJSON(to: connection, status: 200, body: #"{"setup":true}"#)
         }
-        connection.cancel()
     }
 
     private func handlePostConfig(body: Data, connection: NWConnection) {
         guard !body.isEmpty,
               var dict = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
             sendJSON(to: connection, status: 400, body: #"{"error":"invalid json"}"#)
-            connection.cancel()
             return
         }
 
-        // Expand ~ in sourceDir
         if let sourceDir = dict["sourceDir"] as? String {
             dict["sourceDir"] = NSString(string: sourceDir).expandingTildeInPath
         }
 
         guard let output = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted]) else {
             sendJSON(to: connection, status: 500, body: #"{"error":"serialization failed"}"#)
-            connection.cancel()
             return
         }
 
@@ -312,7 +307,6 @@ actor BridgeServer {
         } catch {
             sendJSON(to: connection, status: 500, body: #"{"error":"\(error.localizedDescription)"}"#)
         }
-        connection.cancel()
     }
 
     private func handleGetNodes(connection: NWConnection) {
@@ -322,13 +316,11 @@ actor BridgeServer {
         } else {
             sendJSON(to: connection, status: 200, body: #"{"nodes":[],"links":[],"satellites":{},"toolMap":[]}"#)
         }
-        connection.cancel()
     }
 
     private func handlePostEvent(body: Data, connection: NWConnection) async {
         guard !body.isEmpty else {
             sendJSON(to: connection, status: 400, body: #"{"error":"empty body"}"#)
-            connection.cancel()
             return
         }
 
@@ -337,7 +329,6 @@ actor BridgeServer {
             dict = parsed
         } else {
             sendJSON(to: connection, status: 400, body: #"{"error":"invalid json"}"#)
-            connection.cancel()
             return
         }
 
@@ -347,12 +338,10 @@ actor BridgeServer {
 
         if let eventData = try? JSONSerialization.data(withJSONObject: dict),
            let jsonString = String(data: eventData, encoding: .utf8) {
-            let sse = "data: \(jsonString)\n\n"
-            broadcast(sse)
+            broadcast("data: \(jsonString)\n\n")
         }
 
         sendJSON(to: connection, status: 200, body: #"{"ok":true}"#)
-        connection.cancel()
     }
 
     private func handleGetSessions(connection: NWConnection) {
@@ -364,13 +353,10 @@ actor BridgeServer {
         } else {
             sendJSON(to: connection, status: 200, body: "[]")
         }
-        connection.cancel()
     }
 
     private func handleGetHealth(connection: NWConnection) {
-        let count = clients.count
-        sendJSON(to: connection, status: 200, body: #"{"ok":true,"clients":\#(count)}"#)
-        connection.cancel()
+        sendJSON(to: connection, status: 200, body: #"{"ok":true,"clients":\#(clients.count)}"#)
     }
 
     // MARK: - SSE fan-out
@@ -422,11 +408,13 @@ actor BridgeServer {
         return Data(head.utf8)
     }
 
-    private func sendRaw(to connection: NWConnection, status: String, headers: [String], body: Data) {
+    private func sendRaw(to connection: NWConnection, status: String, headers: [String], body: Data, closeAfter: Bool = true) {
         let head = buildResponseHead(status: status, headers: headers)
         var response = head
         response.append(body)
-        connection.send(content: response, completion: .contentProcessed { _ in })
+        connection.send(content: response, completion: .contentProcessed { _ in
+            if closeAfter { connection.cancel() }
+        })
     }
 
     private func sendJSON(to connection: NWConnection, status: Int, body: String) {
@@ -445,7 +433,6 @@ actor BridgeServer {
 
     private func sendResponse(to connection: NWConnection, status: Int, body: String) {
         sendJSON(to: connection, status: status, body: body)
-        connection.cancel()
     }
 
     private func isValidJSON(_ data: Data) -> Bool {
