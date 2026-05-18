@@ -320,6 +320,84 @@
     flex-shrink: 0;
   }
 
+  /* ── Setup / Loading screens ───────────────────────── */
+  .screen-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .setup-card {
+    width: min(520px, 90vw);
+    background: rgba(14, 20, 36, 0.96);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 36px 36px 32px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+  }
+  .setup-logo {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+  }
+  .setup-logo-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 16px var(--accent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  .setup-logo-name {
+    font-size: 16px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  .setup-title {
+    font-size: 13px; color: var(--ink-dim); margin-bottom: 24px; line-height: 1.6;
+  }
+  .setup-field { margin-bottom: 18px; }
+  .setup-label {
+    display: block; font-size: 11px; color: var(--ink-dim);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 6px; font-weight: 600;
+  }
+  .setup-hint {
+    font-size: 10.5px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5;
+  }
+  .setup-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .setup-input:focus { border-color: rgba(76,195,255,0.4); }
+  .setup-input::placeholder { color: var(--ink-faint); }
+  .setup-btn {
+    width: 100%;
+    background: linear-gradient(180deg, rgba(76,195,255,.16), rgba(76,195,255,.06));
+    border: 1px solid rgba(76,195,255,.4);
+    border-radius: 9px;
+    color: var(--accent-2);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 11px;
+    cursor: pointer;
+    transition: all .15s;
+    margin-top: 8px;
+    font-family: 'Inter', sans-serif;
+  }
+  .setup-btn:hover { border-color: var(--accent); color: #fff; box-shadow: 0 0 24px -4px rgba(76,195,255,.4); }
+  .setup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .setup-error { margin-top: 12px; color: #f87171; font-size: 11px; text-align: center; }
+  .loading-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 12px var(--accent);
+  }
+
   /* ── Bottom-left status ─────────────────────────────── */
   .status {
     position: fixed; bottom: 22px; left: 24px;
@@ -491,147 +569,6 @@ const CAT_COLOR = {
   bg:      '#4cc3ff',  // neurônios de fundo
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Nós nomeados do vault — colocados nas regiões corretas do cérebro
-// ──────────────────────────────────────────────────────────────────────────
-const VAULT_NODES = [
-  // ── Cerebelo: Tools / Agentes ──────────────────────────────────────────
-  { name: 'Claudicaro',      region: 'cerebellum', hub: true,  category: 'agent', weight: 1.00, desc: 'Persona ativa — orquestra tudo (bypass/plano/accepts)',      md: 'tools/agents/🧠 Claudicaro.md' },
-  { name: '/commit',         region: 'cerebellum', hub: true,  category: 'skill', weight: 0.88, desc: 'branch → review → commit → push → PR',                      md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/plan-executor',  region: 'cerebellum', hub: true,  category: 'skill', weight: 0.85, desc: 'Waves paralelas com task-workers',                           md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/commit-qa',      region: 'cerebellum', hub: false, category: 'skill', weight: 0.65, desc: 'commit + push + mensagem QA (sem branch nem PR)',            md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/review-diff',    region: 'cerebellum', hub: false, category: 'skill', weight: 0.60, desc: 'Code review do diff atual ou da branch inteira',             md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/plan-analyzer',  region: 'cerebellum', hub: false, category: 'skill', weight: 0.58, desc: 'Dry-run: analisa waves com dependências',                    md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/compact-v2',     region: 'cerebellum', hub: false, category: 'skill', weight: 0.55, desc: 'Salva memória estruturada antes de compactar',               md: 'tools/skills/🛠️ Skills.md' },
-  { name: '/pr-review',      region: 'cerebellum', hub: false, category: 'skill', weight: 0.55, desc: 'Revisa PR Bitbucket: diff, comentários, aprovações',         md: 'tools/skills/🛠️ Skills.md' },
-  { name: 'Task Worker',     region: 'cerebellum', hub: false, category: 'agent', weight: 0.62, desc: 'Agente isolado de implementação — nunca commita',            md: 'tools/agents/⚙️ Task Worker.md' },
-
-  // ── Hemisfério E: DSG ──────────────────────────────────────────────────
-  { name: 'Tech Lead DSG',        region: 'cerebrum-L', hub: true,  category: 'dsg', weight: 0.92, desc: 'Orquestra v1 + v2 + microserviços DSG',                        md: 'dsg/cerebro-tech-lead/🧠 Tech Lead.md' },
-  { name: 'Tech Lead MS',         region: 'cerebrum-L', hub: true,  category: 'dsg', weight: 0.82, desc: 'ms-auth, ms-ged, microservice-email, microservice-ia',          md: 'dsg/cerebro-tech-lead/🧠 Tech Lead.md' },
-  { name: 'Depósito Antecipado',  region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.70, desc: 'Agendamento + pagamento antecipado (8 bugs mapeados)',           md: 'dsg/cerebros-especialistas/deposito-antecipado/💰 Deposito Antecipado.md' },
-  { name: 'Reserva de Horário',   region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.68, desc: 'Slots SOC + interna — bug #332 documentado',                    md: 'dsg/cerebros-especialistas/reserva-horario/📅 Reserva de Horário.md' },
-  { name: 'Banco de Dados',       region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.65, desc: 'PostgreSQL + MongoDB + Redis',                                  md: 'dsg/cerebros-especialistas/banco-de-dados/🗄️ Banco de Dados.md' },
-  { name: 'Filas SQS',            region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.58, desc: 'AWS SQS — filas assíncronas',                                   md: 'dsg/cerebros-especialistas/filas-sqs/📨 Filas SQS.md' },
-  { name: 'Frontend Vue3',        region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.60, desc: 'Vue 3, Quasar — v1 e v2',                                       md: 'dsg/cerebros-especialistas/frontend/🖥️ Frontend Vue3.md' },
-  { name: 'Arquitetura DSG',      region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.58, desc: 'Clean Architecture 4 camadas — domain/app/infra/pres',          md: 'dsg/cerebros-especialistas/arquitetura/🏗️ Arquitetura v1.md' },
-  { name: 'Grupos de Permissões', region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.55, desc: 'Auth Keycloak + SAAP dois canais',                              md: 'dsg/cerebros-especialistas/grupos-permissoes/🔐 Grupos de Permissões.md' },
-  { name: 'LUMA',                 region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.60, desc: 'MaviIA / WhatsApp IA — FLUXO09/05/COBRAR/01',                   md: 'dsg/cerebros-especialistas/luma/🤖 LUMA.md' },
-  { name: 'TraceAI',              region: 'cerebrum-L', hub: false, category: 'dsg', weight: 0.50, desc: 'Agente IA externo — Google Generative AI',                      md: 'dsg/cerebros-especialistas/traceai/🔍 TraceAI.md' },
-
-  // ── Hemisfério D: CAST ─────────────────────────────────────────────────
-  { name: 'Tech Lead CAST', region: 'cerebrum-R', hub: true,  category: 'cast', weight: 0.90, desc: 'TJAM — SGSA, Contratos, SisDoc',                             md: 'cast/cerebro-tech-lead/🏛️ Tech Lead CAST.md' },
-  { name: 'SGSA',           region: 'cerebrum-R', hub: false, category: 'cast', weight: 0.68, desc: 'NestJS + WebSockets + print-service térmico',                 md: 'cast/especialistas/sgsa/🏛️ SGSA.md' },
-  { name: 'Contratos',      region: 'cerebrum-R', hub: false, category: 'cast', weight: 0.62, desc: 'TJAM contratos — módulos por domínio',                        md: 'cast/especialistas/contratos/📄 Contratos.md' },
-  { name: 'SisDoc',         region: 'cerebrum-R', hub: false, category: 'cast', weight: 0.60, desc: 'Lambda + S3 + SES + cron jobs — deploy serverless',           md: 'cast/especialistas/sisdoc/📁 SisDoc.md' },
-
-  // ── Tronco: MCPs ──────────────────────────────────────────────────────
-  { name: 'MCP Obsidian',      region: 'brainstem', hub: false, category: 'mcp', weight: 0.60, desc: 'Lê e escreve o vault do Obsidian',   md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP Context7',      region: 'brainstem', hub: false, category: 'mcp', weight: 0.58, desc: 'Docs de libs em tempo real',          md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP Chrome',        region: 'brainstem', hub: false, category: 'mcp', weight: 0.55, desc: 'Automação do browser Chrome',         md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP Google Drive',  region: 'brainstem', hub: false, category: 'mcp', weight: 0.50, desc: 'Arquivos no Google Drive',            md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP LinkedIn',      region: 'brainstem', hub: false, category: 'mcp', weight: 0.48, desc: 'Perfis e vagas do LinkedIn',          md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP Mermaid',       region: 'brainstem', hub: false, category: 'mcp', weight: 0.48, desc: 'Geração de diagramas Mermaid',        md: 'tools/mcps/🔌 MCPs.md' },
-  { name: 'MCP Atlassian',     region: 'brainstem', hub: false, category: 'mcp', weight: 0.48, desc: 'Jira + Confluence',                   md: 'tools/mcps/🔌 MCPs.md' },
-];
-
-// ──────────────────────────────────────────────────────────────────────────
-// Conexões explícitas entre nós nomeados — mirrors do [[wikilinks]] do vault
-// ──────────────────────────────────────────────────────────────────────────
-const VAULT_LINKS_NAMED = [
-  // Claudicaro → tudo
-  ['Claudicaro', 'Tech Lead DSG'],
-  ['Claudicaro', 'Tech Lead MS'],
-  ['Claudicaro', 'Tech Lead CAST'],
-  ['Claudicaro', '/commit'],
-  ['Claudicaro', '/plan-executor'],
-  ['Claudicaro', '/commit-qa'],
-  ['Claudicaro', '/review-diff'],
-  ['Claudicaro', '/compact-v2'],
-  ['Claudicaro', '/plan-analyzer'],
-  ['Claudicaro', '/pr-review'],
-  ['Claudicaro', 'MCP Obsidian'],
-  ['Claudicaro', 'MCP Context7'],
-
-  // Skills inter-calls
-  ['/plan-executor', 'Task Worker'],
-  ['/plan-executor', '/commit'],
-  ['/commit', '/commit-qa'],
-  ['/commit', '/review-diff'],
-
-  // Tech Lead DSG → especialistas
-  ['Tech Lead DSG', 'Depósito Antecipado'],
-  ['Tech Lead DSG', 'Reserva de Horário'],
-  ['Tech Lead DSG', 'Banco de Dados'],
-  ['Tech Lead DSG', 'Filas SQS'],
-  ['Tech Lead DSG', 'Frontend Vue3'],
-  ['Tech Lead DSG', 'Arquitetura DSG'],
-  ['Tech Lead DSG', 'Grupos de Permissões'],
-  ['Tech Lead DSG', 'LUMA'],
-  ['Tech Lead DSG', 'TraceAI'],
-  ['Tech Lead DSG', 'Tech Lead MS'],
-
-  // Parallelismo DSG — a parte interessante do grafo
-  ['Depósito Antecipado', 'Reserva de Horário'],  // status DEPOSITO_ANTECIPADO bloqueia agendamento
-  ['Depósito Antecipado', 'Banco de Dados'],
-  ['Depósito Antecipado', 'Arquitetura DSG'],
-  ['Reserva de Horário', 'LUMA'],                  // LUMA chama agendamentoFluxoIaService.iniciarFluxo()
-  ['Reserva de Horário', 'Banco de Dados'],
-  ['LUMA', 'Filas SQS'],
-  ['LUMA', 'Banco de Dados'],
-  ['Grupos de Permissões', 'Frontend Vue3'],
-  ['Grupos de Permissões', 'Banco de Dados'],
-  ['Arquitetura DSG', 'Banco de Dados'],
-  ['Frontend Vue3', 'Arquitetura DSG'],
-
-  // Tech Lead CAST → especialistas
-  ['Tech Lead CAST', 'SGSA'],
-  ['Tech Lead CAST', 'Contratos'],
-  ['Tech Lead CAST', 'SisDoc'],
-
-  // Corpus callosum — pontes entre hemisférios via Claudicaro já cobrindo
-  // mas também: Tech Lead DSG ↔ Tech Lead CAST via Claudicaro + direto
-];
-
-// ──────────────────────────────────────────────────────────────────────────
-// Satélites de domínio — conhecimento periférico de cada nó vault
-// ──────────────────────────────────────────────────────────────────────────
-const SATELLITE_MAP = {
-  'Claudicaro':           ['bypass', 'plano', 'wave', 'aceitar', 'session', 'memória', 'RTK'],
-  '/commit':              ['branch', 'staged', 'push', 'PR', 'Bitbucket', 'conventional'],
-  '/plan-executor':       ['wave', 'parallel', 'haiku', 'atomic', 'commit-loop'],
-  '/commit-qa':           ['ggp', 'sem PR', 'mensagem QA'],
-  '/review-diff':         ['diff', 'lint', 'arch', 'security', 'OWASP'],
-  '/plan-analyzer':       ['topologia', 'dependência', 'dry-run', 'wave'],
-  '/compact-v2':          ['contexto', 'memória', 'sessão', 'engram'],
-  '/pr-review':           ['Bitbucket API', 'aprovação', 'comentário'],
-  'Task Worker':          ['isolado', 'worktree', 'sem commit', 'retorna diff'],
-
-  'Tech Lead DSG':        ['v1', 'v2', 'NestJS', 'TypeORM', 'Keycloak', 'PostgreSQL', 'Redis', 'agendamento', 'SQS'],
-  'Tech Lead MS':         ['ms-auth', 'ms-ged', 'JWT', 'S3', 'Kafka', 'MongoDB', 'email', 'mavi-api'],
-  'Depósito Antecipado':  ['saldo', 'crédito', 'reembolso', 'extrato', 'cron', 'email', 'guia', 'status DA'],
-  'Reserva de Horário':   ['slot', 'SOC', 'interna', 'bloqueio', 'horário', 'LUMA flow'],
-  'Banco de Dados':       ['PostgreSQL', 'MongoDB', 'migration', 'índice', 'query', 'Redis'],
-  'Filas SQS':            ['queue', 'producer', 'consumer', 'dead-letter', 'retry', 'Lambda'],
-  'Frontend Vue3':        ['Quasar', 'composable', 'rota', 'guard', 'keycloak-js', 'store'],
-  'Arquitetura DSG':      ['domain', 'application', 'infra', 'presentation', 'usecase', 'repository'],
-  'Grupos de Permissões': ['SAAP', 'Keycloak', 'role', 'grupo', 'canal', 'token'],
-  'LUMA':                 ['WhatsApp', 'fluxo', 'IA', 'agendamento', 'resposta', 'webhook'],
-  'TraceAI':              ['Google AI', 'documento', 'OCR', 'análise', 'generative'],
-
-  'Tech Lead CAST':       ['TJAM', 'judicial', 'NestJS', 'Keycloak', 'Lambda', 'S3'],
-  'SGSA':                 ['fila', 'WebSocket', 'socket.io', 'guichê', 'thermal'],
-  'Contratos':            ['contrato', 'módulo', 'TJAM', 'Vue3', 'assinatura'],
-  'SisDoc':               ['documento', 'Lambda', 'S3', 'SES', 'cron', 'serverless'],
-
-  'MCP Obsidian':         ['vault', 'note', 'tag', 'wikilink', 'markdown'],
-  'MCP Context7':         ['docs', 'library', 'versão', 'SDK', 'changelog'],
-  'MCP Chrome':           ['browser', 'tab', 'DOM', 'screenshot', 'network'],
-  'MCP Google Drive':     ['arquivo', 'pasta', 'permissão', 'download'],
-  'MCP LinkedIn':         ['perfil', 'vaga', 'empresa', 'conexão'],
-  'MCP Mermaid':          ['diagrama', 'flowchart', 'sequência', 'ERD'],
-  'MCP Atlassian':        ['Jira', 'Confluence', 'ticket', 'sprint'],
-};
 
 // ──────────────────────────────────────────────────────────────────────────
 // Anatomia do cérebro (igual ao original)
@@ -697,13 +634,14 @@ function brainRegion(x, y, z) {
 
 // ──────────────────────────────────────────────────────────────────────────
 // buildBrainGraph — only vault nodes, no background fill
+// data = { nodes: [...], links: [[a,b],...], satellites: {name:[...]} }
 // ──────────────────────────────────────────────────────────────────────────
-function buildBrainGraph() {
+function buildBrainGraph(data) {
   const nodes = [];
   const nameToId = {};
 
   // 1. Place each vault node by rejection-sampling in its target region
-  for (const vn of VAULT_NODES) {
+  for (const vn of data.nodes) {
     let placed = false;
     for (let attempt = 0; attempt < 2000; attempt++) {
       const x = (Math.random() - 0.5) * 560;
@@ -763,7 +701,7 @@ function buildBrainGraph() {
   }
 
   // 2. Place satellite nodes around each vault node
-  for (const [parentName, concepts] of Object.entries(SATELLITE_MAP)) {
+  for (const [parentName, concepts] of Object.entries(data.satellites || {})) {
     const parentId = nameToId[parentName];
     if (parentId === undefined) continue;
     const parent = nodes[parentId];
@@ -856,7 +794,7 @@ function buildBrainGraph() {
 
   // Explicit vault links — added on top
   const vaultLinkSet = new Set();
-  for (const [aName, bName] of VAULT_LINKS_NAMED) {
+  for (const [aName, bName] of (data.links || [])) {
     const aId = nameToId[aName];
     const bId = nameToId[bName];
     if (aId === undefined || bId === undefined) continue;
@@ -1060,8 +998,8 @@ class CerebroEngine {
     this.canvas.removeEventListener('mouseleave', this.onMouseLeave);
   }
 
-  build() {
-    const { nodes, links, adjacency, nameToId } = buildBrainGraph();
+  build(data) {
+    const { nodes, links, adjacency, nameToId } = buildBrainGraph(data);
     this.nodes = nodes;
     this.links = links;
     this.adjacency = adjacency;
@@ -1683,7 +1621,6 @@ class CerebroEngine {
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 window.CerebroEngine = CerebroEngine;
-window.VAULT_NODES = VAULT_NODES;
 window.CAT_COLOR = CAT_COLOR;
 
   </script>
@@ -1691,6 +1628,9 @@ window.CAT_COLOR = CAT_COLOR;
   <script type="text/babel" data-presets="react">
 
 const { useEffect, useRef, useState, useCallback } = React;
+
+// Bridge port: default 8766, overridable via ?bridge=XXXX in URL
+const BRIDGE_PORT = parseInt(new URLSearchParams(location.search).get('bridge') || '8766', 10);
 
 const REGION_LABELS = {
   'cerebrum-L': 'DSG — hemisfério E',
@@ -1882,7 +1822,92 @@ function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setA
   );
 }
 
-function MdViewer({ node, onClose }) {
+function LoadingScreen() {
+  return (
+    <div className="screen-overlay">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <div className="loading-dot" />
+        <span style={{ color: 'var(--ink-dim)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+          conectando ao bridge…
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SetupScreen({ onDone }) {
+  const [sourceDir, setSourceDir] = useState('');
+  const [httpPort, setHttpPortInput] = useState('8765');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    if (!sourceDir.trim()) { setError('Informe o diretório de notas.'); return; }
+    setSaving(true); setError('');
+    try {
+      const res = await fetch(`http://localhost:${BRIDGE_PORT}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceDir: sourceDir.trim(), bridgePort: BRIDGE_PORT, httpPort: parseInt(httpPort, 10) || 8765 }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar.');
+      onDone();
+    } catch (e) {
+      setError('Não foi possível salvar. Verifique se o bridge está rodando: ./start.sh');
+      setSaving(false);
+    }
+  };
+
+  const onKey = (e) => { if (e.key === 'Enter') save(); };
+
+  return (
+    <div className="screen-overlay">
+      <div className="setup-card">
+        <div className="setup-logo">
+          <div className="setup-logo-dot" />
+          <span className="setup-logo-name">Brain Atlas</span>
+        </div>
+        <div className="setup-title">
+          Configure onde estão suas notas. O Brain Atlas vai ler os arquivos .md dessa pasta para o visualizador.
+        </div>
+
+        <div className="setup-field">
+          <label className="setup-label">Diretório de notas</label>
+          <input
+            className="setup-input"
+            type="text"
+            placeholder="~/Documents/notes"
+            value={sourceDir}
+            onChange={e => setSourceDir(e.target.value)}
+            onKeyDown={onKey}
+            autoFocus
+          />
+          <div className="setup-hint">Caminho absoluto ou com ~. Ex: ~/Documents/Obsidian/Dev</div>
+        </div>
+
+        <div className="setup-field">
+          <label className="setup-label">Porta HTTP <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>(opcional)</span></label>
+          <input
+            className="setup-input"
+            type="text"
+            placeholder="8765"
+            value={httpPort}
+            onChange={e => setHttpPortInput(e.target.value)}
+            onKeyDown={onKey}
+          />
+          <div className="setup-hint">Porta do servidor que serve os arquivos .md. Padrão: 8765.</div>
+        </div>
+
+        <button className="setup-btn" onClick={save} disabled={saving}>
+          {saving ? 'Salvando…' : 'Iniciar Brain Atlas'}
+        </button>
+        {error && <div className="setup-error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+function MdViewer({ node, onClose, httpPort }) {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(false);
   const open = node != null;
@@ -1895,7 +1920,7 @@ function MdViewer({ node, onClose }) {
     setLoading(true);
     setContent(null);
     const encoded = node.md.split('/').map(p => encodeURIComponent(p)).join('/');
-    fetch(`http://localhost:8765/${encoded}`)
+    fetch(`http://localhost:${httpPort}/${encoded}`)
       .then(r => r.text())
       .then(txt => { setContent(txt); setLoading(false); })
       .catch(() => { setContent('> Não foi possível carregar o arquivo.'); setLoading(false); });
@@ -1952,8 +1977,30 @@ function App() {
   const [autoRotate, setAutoRotate] = useState(false);
   const [bridge, setBridge] = useState({ connected: false, lastNode: null });
   const [selectedNode, setSelectedNode] = useState(null);
+  // 'loading' | 'setup' | 'ready'
+  const [appState, setAppState] = useState('loading');
+  const [httpPort, setHttpPort] = useState(8765);
+  const [graphData, setGraphData] = useState(null);
 
+  // Phase 1: load config + nodes from bridge
+  const loadData = useCallback(() => {
+    fetch(`http://localhost:${BRIDGE_PORT}/config`)
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg.setup) { setAppState('setup'); return; }
+        setHttpPort(cfg.httpPort || 8765);
+        return fetch(`http://localhost:${BRIDGE_PORT}/nodes`)
+          .then(r => r.json())
+          .then(data => { setGraphData(data); setAppState('ready'); });
+      })
+      .catch(() => setAppState('setup'));
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Phase 2: mount engine when data is ready
   useEffect(() => {
+    if (appState !== 'ready' || !graphData) return;
     const canvas = document.getElementById('graph');
     const eng = new window.CerebroEngine(canvas);
     engineRef.current = eng;
@@ -1965,34 +2012,33 @@ function App() {
     eng.onNodeClick = (n) => {
       setSelectedNode(prev => (prev?.label === n.label ? null : n));
     };
-    eng.build();
+    eng.build(graphData);
     eng.start();
     const initialPulse = setTimeout(() => eng.triggerThought(), 1100);
 
-    // Load session engrams from bridge
-    fetch('http://localhost:8766/sessions')
+    fetch(`http://localhost:${BRIDGE_PORT}/sessions`)
       .then(r => r.json())
       .then(sessions => { if (sessions?.length) eng.injectSessionNodes(sessions); })
       .catch(() => {});
 
     return () => { clearTimeout(initialPulse); eng.destroy(); };
-  }, []);
+  }, [appState, graphData]);
 
-  // SSE bridge — dispara pensamentos em tempo real quando Claude usa tools
+  // Phase 3: SSE bridge — dispara pensamentos em tempo real quando Claude usa tools
   useEffect(() => {
+    if (appState !== 'ready') return;
     let es = null;
     let retryTimer = null;
     const connect = () => {
       try {
-        es = new EventSource('http://localhost:8766/stream');
+        es = new EventSource(`http://localhost:${BRIDGE_PORT}/stream`);
         es.onopen = () => setBridge(b => ({ ...b, connected: true }));
-        es.onmessage = (e) => {
+        es.onmessage = (ev) => {
           try {
-            const data = JSON.parse(e.data);
+            const data = JSON.parse(ev.data);
             if (data.keep_alive) return;
             if (data.node && engineRef.current) {
               const nodeId = engineRef.current.nameToId[data.node];
-              // Só dispara se o nó existe; profundidade 3, apenas nós do vault
               if (nodeId !== undefined) {
                 engineRef.current.triggerThought(nodeId, 3, true);
               }
@@ -2012,7 +2058,7 @@ function App() {
       clearTimeout(retryTimer);
       if (es) { es.close(); }
     };
-  }, []);
+  }, [appState]);
 
   useEffect(() => { engineRef.current?.setSpeed(speed); }, [speed]);
   useEffect(() => { engineRef.current?.setGlow(glow); }, [glow]);
@@ -2049,6 +2095,9 @@ function App() {
 
   const onTrigger = useCallback(() => { engineRef.current?.triggerThought(); }, []);
 
+  if (appState === 'loading') return <LoadingScreen />;
+  if (appState === 'setup') return <SetupScreen onDone={() => { setAppState('loading'); loadData(); }} />;
+
   return (
     <React.Fragment>
       <Panel
@@ -2060,7 +2109,7 @@ function App() {
       />
       <Tooltip node={hover?.node} pos={hover?.pos || null} />
       <StatusBar stats={stats} bridge={bridge} />
-      <MdViewer node={selectedNode} onClose={() => setSelectedNode(null)} />
+      <MdViewer node={selectedNode} onClose={() => setSelectedNode(null)} httpPort={httpPort} />
     </React.Fragment>
   );
 }

@@ -1,3 +1,4 @@
+config.json
 sessions.json
 *.log
 __pycache__/

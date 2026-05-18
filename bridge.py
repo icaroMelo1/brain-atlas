@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Cerebro Bridge — SSE fanout server for Cerebro.html visualization.
-Runs on port 8766. Uses only Python stdlib.
+Brain Atlas Bridge — SSE fanout + config/nodes API.
+Uses only Python stdlib.
 """
 
 import json
@@ -11,8 +11,26 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-PORT = 8766
-SESSIONS_FILE = Path.home() / ".claude" / "cerebro" / "sessions.json"
+SCRIPT_DIR = Path(__file__).parent.resolve()
+CONFIG_FILE = SCRIPT_DIR / "config.json"
+NODES_FILE = SCRIPT_DIR / "nodes.json"
+SESSIONS_FILE = SCRIPT_DIR / "sessions.json"
+
+DEFAULT_PORT = 8766
+
+
+def _load_config() -> dict:
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _port() -> int:
+    return int(_load_config().get("bridgePort", DEFAULT_PORT))
+
 
 # Thread-safe list of SSE client queues
 _clients: list = []
@@ -33,95 +51,126 @@ def _remove_client(q):
 
 
 def _fanout(data: str):
-    """Send SSE data line to all connected clients; drop disconnected ones."""
     with _clients_lock:
         snapshot = list(_clients)
-
     dead = []
     for q in snapshot:
         try:
             q.put_nowait(data)
         except Exception:
             dead.append(q)
-
     for q in dead:
         _remove_client(q)
 
 
-def _cors_headers(handler):
+def _cors(handler):
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type")
 
 
-class CerebroHandler(BaseHTTPRequestHandler):
+def _json_response(handler, status: int, data):
+    body = json.dumps(data).encode("utf-8")
+    handler.send_response(status)
+    _cors(handler)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+class BridgeHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):  # noqa: A002
-        # Suppress default access log noise
         pass
 
-    # ------------------------------------------------------------------
-    # OPTIONS — CORS preflight
-    # ------------------------------------------------------------------
     def do_OPTIONS(self):
         self.send_response(200)
-        _cors_headers(self)
+        _cors(self)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    # ------------------------------------------------------------------
-    # POST /event
-    # ------------------------------------------------------------------
-    def do_POST(self):
-        if self.path != "/event":
-            self.send_response(404)
-            self.end_headers()
-            return
-
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
-
-        try:
-            payload = json.loads(body)
-        except json.JSONDecodeError:
-            self.send_response(400)
-            _cors_headers(self)
-            self.end_headers()
-            self.wfile.write(b'{"error":"invalid json"}')
-            return
-
-        # Ensure ts field exists
-        if "ts" not in payload:
-            payload["ts"] = int(time.time())
-
-        sse_line = "data: " + json.dumps(payload) + "\n\n"
-        _fanout(sse_line)
-
-        self.send_response(200)
-        _cors_headers(self)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"ok":true}')
-
-    # ------------------------------------------------------------------
-    # GET
-    # ------------------------------------------------------------------
     def do_GET(self):
-        if self.path == "/stream":
-            self._handle_stream()
-        elif self.path == "/sessions":
-            self._handle_sessions()
-        elif self.path == "/health":
-            self._handle_health()
+        routes = {
+            "/stream":   self._stream,
+            "/config":   self._get_config,
+            "/nodes":    self._get_nodes,
+            "/sessions": self._get_sessions,
+            "/health":   self._health,
+        }
+        handler = routes.get(self.path)
+        if handler:
+            handler()
         else:
             self.send_response(404)
             self.end_headers()
 
-    # ------------------------------------------------------------------
-    # GET /stream — SSE
-    # ------------------------------------------------------------------
-    def _handle_stream(self):
-        import queue as _queue
+    def do_POST(self):
+        if self.path == "/event":
+            self._post_event()
+        elif self.path == "/config":
+            self._post_config()
+        else:
+            self.send_response(404)
+            self.end_headers()
 
+    # ── GET /config ────────────────────────────────────────────────────────
+    def _get_config(self):
+        if not CONFIG_FILE.exists():
+            _json_response(self, 200, {"setup": True})
+            return
+        try:
+            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            _json_response(self, 200, data)
+        except Exception:
+            _json_response(self, 200, {"setup": True})
+
+    # ── POST /config ───────────────────────────────────────────────────────
+    def _post_config(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            _json_response(self, 400, {"error": "invalid json"})
+            return
+
+        # Expand ~ in sourceDir
+        if "sourceDir" in data:
+            data["sourceDir"] = str(Path(data["sourceDir"]).expanduser())
+
+        CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        _json_response(self, 200, {"ok": True})
+
+    # ── GET /nodes ─────────────────────────────────────────────────────────
+    def _get_nodes(self):
+        if not NODES_FILE.exists():
+            _json_response(self, 200, {"nodes": [], "links": [], "satellites": {}, "toolMap": []})
+            return
+        try:
+            data = json.loads(NODES_FILE.read_text(encoding="utf-8"))
+            _json_response(self, 200, data)
+        except Exception as e:
+            _json_response(self, 500, {"error": str(e)})
+
+    # ── POST /event ────────────────────────────────────────────────────────
+    def _post_event(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            _json_response(self, 400, {"error": "invalid json"})
+            return
+
+        if "ts" not in payload:
+            payload["ts"] = int(time.time())
+
+        _fanout("data: " + json.dumps(payload) + "\n\n")
+        _json_response(self, 200, {"ok": True})
+
+    # ── GET /stream ────────────────────────────────────────────────────────
+    def _stream(self):
+        import queue as _queue
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -131,7 +180,6 @@ class CerebroHandler(BaseHTTPRequestHandler):
 
         q = _queue.Queue()
         _add_client(q)
-
         try:
             while True:
                 try:
@@ -139,7 +187,6 @@ class CerebroHandler(BaseHTTPRequestHandler):
                     self.wfile.write(data.encode("utf-8"))
                     self.wfile.flush()
                 except _queue.Empty:
-                    # Send a keep-alive comment
                     self.wfile.write(b": keep-alive\n\n")
                     self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):
@@ -147,44 +194,33 @@ class CerebroHandler(BaseHTTPRequestHandler):
         finally:
             _remove_client(q)
 
-    # ------------------------------------------------------------------
-    # GET /sessions
-    # ------------------------------------------------------------------
-    def _handle_sessions(self):
+    # ── GET /sessions ──────────────────────────────────────────────────────
+    def _get_sessions(self):
+        content = "[]"
         if SESSIONS_FILE.exists():
             try:
-                content = SESSIONS_FILE.read_text(encoding="utf-8")
-                json.loads(content)  # validate
+                text = SESSIONS_FILE.read_text(encoding="utf-8")
+                json.loads(text)
+                content = text
             except Exception:
-                content = "[]"
-        else:
-            content = "[]"
-
+                pass
         body = content.encode("utf-8")
         self.send_response(200)
+        _cors(self)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    # ------------------------------------------------------------------
-    # GET /health
-    # ------------------------------------------------------------------
-    def _handle_health(self):
+    # ── GET /health ────────────────────────────────────────────────────────
+    def _health(self):
         with _clients_lock:
             n = len(_clients)
-
-        body = json.dumps({"ok": True, "clients": n}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        _json_response(self, 200, {"ok": True, "clients": n})
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("", PORT), CerebroHandler)
-    print(f"Cerebro Bridge running on http://localhost:{PORT}")
+    port = _port()
+    server = ThreadingHTTPServer(("", port), BridgeHandler)
+    print(f"Brain Atlas Bridge running on http://localhost:{port}")
     server.serve_forever()
