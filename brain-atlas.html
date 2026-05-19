@@ -1120,6 +1120,8 @@ class CerebroEngine {
     this.morphDur      = 1400;
     this.morphStart    = 0;
     this.currentShape  = 'brain';
+    this.prevShape     = 'brain';
+    this.surfaceAlpha  = 1;
     this.options = { speed: 1.0, glow: 1.0, nodeCount: 200 };
     this.running = true;
     this.rafId = 0;
@@ -1356,23 +1358,7 @@ class CerebroEngine {
       if (n) { n.tx = t.x; n.ty = t.y; n.tz = t.z; }
     }
 
-    // Cloud targets (surface + dust)
-    const allCloud = [...this.surface, ...this.dust];
-    const cloudFn = shape === 'brain'        ? null
-                  : shape === 'galaxy'        ? cloudLayoutGalaxy
-                  : shape === 'constellation' ? cloudLayoutConstellation
-                  : cloudLayoutTree;
-
-    if (cloudFn) {
-      const ct = cloudFn(allCloud);
-      for (let i = 0; i < allCloud.length; i++) {
-        allCloud[i].tx = ct[i].x; allCloud[i].ty = ct[i].y; allCloud[i].tz = ct[i].z;
-      }
-    } else {
-      // Returning to brain — restore original positions
-      for (const p of allCloud) { p.tx = p.ox; p.ty = p.oy; p.tz = p.oz; }
-    }
-
+    this.prevShape    = this.currentShape;
     this.currentShape = shape;
     this.morphT = 0;
     this.morphDir = 1;
@@ -1490,19 +1476,28 @@ class CerebroEngine {
     }
     const mt = this.morphT;
 
+    // surfaceAlpha: 1 no modo brain, 0 nos outros (fade in/out com morphT)
+    if (this.prevShape === 'brain' && this.currentShape !== 'brain') {
+      this.surfaceAlpha = 1 - mt;
+    } else if (this.prevShape !== 'brain' && this.currentShape === 'brain') {
+      this.surfaceAlpha = mt;
+    } else if (this.currentShape === 'brain') {
+      this.surfaceAlpha = 1;
+    } else {
+      this.surfaceAlpha = 0;
+    }
+    const sa = this.surfaceAlpha;
+
     // ── Brain dust ─────────────────────────────────────────────────
-    if (this.dust.length) {
+    if (this.dust.length && sa > 0.002) {
       ctx.globalCompositeOperation = 'lighter';
-      const dustAlphaBase = 0.038 * this.options.glow;
+      const dustAlphaBase = 0.038 * this.options.glow * sa;
       for (let i = 0; i < this.dust.length; i++) {
         const d = this.dust[i];
-        const dx = d.ox + (d.tx - d.ox) * mt;
-        const dy = d.oy + (d.ty - d.oy) * mt;
-        const dz = d.oz + (d.tz - d.oz) * mt;
         const ddx = Math.sin(t * d.freq         + d.phase) * DUST_AMP;
         const ddy = Math.sin(t * d.freq * 1.07  + d.phase + 1.3) * DUST_AMP * 0.85;
         const ddz = Math.sin(t * d.freq * 0.93  + d.phase + 2.7) * DUST_AMP * 0.9;
-        const p = this.projectFast(dx + ddx, dy + ddy, dz + ddz, m);
+        const p = this.projectFast(d.x + ddx, d.y + ddy, d.z + ddz, m);
         const depthMul = 1 - clamp((p.depth + 200) / 600, 0, 0.45);
         ctx.globalAlpha = dustAlphaBase * depthMul;
         const r = 9 * k;
@@ -1545,16 +1540,13 @@ class CerebroEngine {
     }
 
     // ── Surface back ───────────────────────────────────────────────
-    if (this.surface.length) {
+    if (this.surface.length && sa > 0.002) {
       ctx.globalCompositeOperation = 'lighter';
       const spr  = this.surfaceSprite;
-      const sBase = 0.032 * this.options.glow;
+      const sBase = 0.032 * this.options.glow * sa;
       const sprR  = 20 * k;
       const pulse = this.surfacePulse;
       for (const pt of this.surface) {
-        const px = pt.ox + (pt.tx - pt.ox) * mt;
-        const py = pt.oy + (pt.ty - pt.oy) * mt;
-        const pz = pt.oz + (pt.tz - pt.oz) * mt;
         const ssx = Math.sin(t * pt.freq         + pt.phase) * SURF_AMP;
         const ssy = Math.sin(t * pt.freq * 1.07  + pt.phase + 1.3) * SURF_AMP * 0.85;
         const ssz = Math.sin(t * pt.freq * 0.93  + pt.phase + 2.7) * SURF_AMP * 0.9;
@@ -1562,14 +1554,14 @@ class CerebroEngine {
         if (pulse) {
           const age = (now - pulse.startedAt) / 1000;
           if (age < 1.8) {
-            const dist = Math.sqrt((px - pulse.cx) ** 2 + (py - pulse.cy) ** 2 + (pz - pulse.cz) ** 2);
+            const dist = Math.sqrt((pt.x - pulse.cx) ** 2 + (pt.y - pulse.cy) ** 2 + (pt.z - pulse.cz) ** 2);
             const wavefront = age * 320;
             const spread = 60;
             const envelope = Math.exp(-((dist - wavefront) ** 2) / (2 * spread * spread));
             pulseAmp = envelope * (1 - age / 1.8) * 8;
           }
         }
-        const p = this.projectFast(px + ssx, py + ssy + pulseAmp, pz + ssz, m);
+        const p = this.projectFast(pt.x + ssx, pt.y + ssy + pulseAmp, pt.z + ssz, m);
         if (p.depth <= 0) continue;
         const depthDim = clamp(1 - p.depth / 480, 0.28, 1.0);
         ctx.globalAlpha = sBase * depthDim;
