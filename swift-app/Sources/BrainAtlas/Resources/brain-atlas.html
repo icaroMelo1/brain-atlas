@@ -1488,6 +1488,7 @@ class CerebroEngine {
       this.morphT = e;
       if (raw >= 1) { this.morphT = 1; this.morphDir = 0; }
     }
+    const mt = this.morphT;
 
     // ── Brain dust ─────────────────────────────────────────────────
     if (this.dust.length) {
@@ -1513,7 +1514,6 @@ class CerebroEngine {
 
     // ── Project nodes ──────────────────────────────────────────────
     const proj = this._proj;
-    const mt = this.morphT;
     for (let i = 0; i < this.nodes.length; i++) {
       const n = this.nodes[i];
       const bx = n.ox + (n.tx - n.ox) * mt;
