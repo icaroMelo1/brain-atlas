@@ -534,7 +534,7 @@
   </div>
 
   <div class="hint">
-    drag · rotate &nbsp;·&nbsp; shift+drag · pan &nbsp;·&nbsp; scroll · zoom &nbsp;·&nbsp; <span class="kbd">space</span> pulsar
+    drag · rotate &nbsp;·&nbsp; <span class="kbd">space</span>+drag · pan &nbsp;·&nbsp; scroll · zoom &nbsp;·&nbsp; <span class="kbd">space</span>×2 · centralizar
   </div>
 
   <div id="root"></div>
@@ -567,6 +567,13 @@ const CAT_COLOR = {
   mcp:     '#fb923c',  // laranja — MCPs
   session: '#e2e8f0',  // prata — Sessões/engrams
   bg:      '#4cc3ff',  // neurônios de fundo
+};
+
+const THEMES = {
+  default: { dsg:'#4cc3ff', cast:'#7dd4a4', skill:'#c084fc', agent:'#fbbf24', mcp:'#fb923c', session:'#e2e8f0', bg:'#4cc3ff' },
+  neon:    { dsg:'#00f5d4', cast:'#4ade80', skill:'#f472b6', agent:'#facc15', mcp:'#fb923c', session:'#f8fafc', bg:'#00f5d4' },
+  pastel:  { dsg:'#a8d8ea', cast:'#b5ead7', skill:'#e8c1f4', agent:'#fde68a', mcp:'#fed7aa', session:'#e2e8f0', bg:'#a8d8ea' },
+  mono:    { dsg:'#d0d0d0', cast:'#b8b8b8', skill:'#a0a0a0', agent:'#c8c8c8', mcp:'#b0b0b0', session:'#e8e8e8', bg:'#d0d0d0' },
 };
 
 
@@ -1122,7 +1129,11 @@ class CerebroEngine {
     this.currentShape  = 'brain';
     this.prevShape     = 'brain';
     this.surfaceAlpha  = 1;
-    this.options = { speed: 1.0, glow: 1.0, nodeCount: 200 };
+    this.mode2D = false;
+    this.spaceHeld = false;
+    this._spaceLastTap = 0;
+    this.nodeMetrics = {};
+    this.options = { speed: 1.0, glow: 1.0, nodeCount: 200, spread: 1.0, edgeWidth: 1.0, edgeOpacity: 1.0 };
     this.running = true;
     this.rafId = 0;
     this.onHover = () => {};
@@ -1137,8 +1148,12 @@ class CerebroEngine {
     }
     this.glowHot  = makeGlowSprite('#ffffff');
     this.glowDust = makeGlowSprite('#3a78c0', 32);
+    this.glowGalaxy        = makeGlowSprite('#8b5cf6');
+    this.glowConstellation = makeGlowSprite('#7dd3fc');
+    this.glowTree          = makeGlowSprite('#4ade80');
     this.surfaceSprite = makeSurfaceSprite('#4cc3ff', 44);
     this.surface = [];
+    this.shapeClouds = { galaxy: [], constellation: [], tree: [] };
     this.dragging = false;
     this.dragMode = 'rotate';
     this.dragStart = { x: 0, y: 0, tx: 0, ty: 0, yaw: 0, pitch: 0 };
@@ -1178,6 +1193,11 @@ class CerebroEngine {
     this.surface = buildBrainSurface(2200);
     for (const p of this.dust)    { p.ox = p.x; p.oy = p.y; p.oz = p.z; p.tx = p.x; p.ty = p.y; p.tz = p.z; }
     for (const p of this.surface) { p.ox = p.x; p.oy = p.y; p.oz = p.z; p.tx = p.x; p.ty = p.y; p.tz = p.z; }
+    this.shapeClouds = {
+      galaxy:        this._buildShapeCloud(cloudLayoutGalaxy),
+      constellation: this._buildShapeCloud(cloudLayoutConstellation),
+      tree:          this._buildShapeCloud(cloudLayoutTree),
+    };
     this.fitToView();
     this.onStats({ nodes: this.nodes.length, links: this.links.length, active: 0 });
   }
@@ -1190,6 +1210,16 @@ class CerebroEngine {
     this.transform.k = Math.max(0.4, Math.min(2.4, k));
     this.transform.x = this.width / 2;
     this.transform.y = this.height / 2 - 30 * this.transform.k;
+  }
+
+  _buildShapeCloud(layoutFn) {
+    const base = this.dust;
+    const positions = layoutFn(base);
+    return positions.map((pos, i) => ({
+      x: pos.x, y: pos.y, z: pos.z,
+      freq:  base[i] ? base[i].freq  : 0.3,
+      phase: base[i] ? base[i].phase : 0,
+    }));
   }
 
   cameraMatrix() {
@@ -1222,7 +1252,7 @@ class CerebroEngine {
 
   onMouseDown(e) {
     this.dragging = true;
-    this.dragMode = (e.shiftKey || e.button === 2) ? 'pan' : 'rotate';
+    this.dragMode = (this.spaceHeld || e.button === 2) ? 'pan' : 'rotate';
     this.camera.animating = false;
     this.canvas.classList.add('grabbing');
     this.dragStart = {
@@ -1240,7 +1270,7 @@ class CerebroEngine {
       if (this.dragMode === 'pan') {
         this.transform.x = this.dragStart.tx + dx;
         this.transform.y = this.dragStart.ty + dy;
-      } else {
+      } else if (!this.mode2D) {
         this.camera.yaw   = this.dragStart.yaw   + dx * 0.0065;
         this.camera.pitch = clamp(this.dragStart.pitch + dy * 0.0065, 0, Math.PI * 0.95);
         this.camera.targetYaw = this.camera.yaw;
@@ -1343,6 +1373,19 @@ class CerebroEngine {
     }
   }
   setAutoRotate(on) { this.camera.autoRotate = !!on; }
+
+  spaceDown() {
+    const now = performance.now();
+    const dt = now - (this._spaceLastTap || 0);
+    this._spaceLastTap = now;
+    if (dt < 300) {
+      this.fitToView();
+      this.setView(0.42, 0.55, true);
+    }
+    this.spaceHeld = true;
+  }
+
+  spaceUp() { this.spaceHeld = false; }
 
   morphTo(shape) {
     if (shape === this.currentShape || !this.nodes.length) return;
@@ -1449,7 +1492,7 @@ class CerebroEngine {
       }
       this.onCamera({ yaw: this.camera.yaw, pitch: this.camera.pitch });
     }
-    if (this.camera.autoRotate && !this.dragging && !this.camera.animating) {
+    if (this.camera.autoRotate && !this.mode2D && !this.dragging && !this.camera.animating) {
       this.camera.yaw += 0.0024 * this.options.speed;
       this.camera.targetYaw = this.camera.yaw;
     }
@@ -1487,6 +1530,18 @@ class CerebroEngine {
       this.surfaceAlpha = 0;
     }
     const sa = this.surfaceAlpha;
+    const sp = this.options.spread;
+
+    // Shape cloud alphas (parallel to surfaceAlpha for non-brain shapes)
+    const galaxyAlpha = this.currentShape === 'galaxy'
+      ? (this.prevShape === 'galaxy' ? 1 : mt)
+      : (this.prevShape === 'galaxy' ? 1 - mt : 0);
+    const constAlpha = this.currentShape === 'constellation'
+      ? (this.prevShape === 'constellation' ? 1 : mt)
+      : (this.prevShape === 'constellation' ? 1 - mt : 0);
+    const treeAlpha = this.currentShape === 'tree'
+      ? (this.prevShape === 'tree' ? 1 : mt)
+      : (this.prevShape === 'tree' ? 1 - mt : 0);
 
     // ── Brain dust ─────────────────────────────────────────────────
     if (this.dust.length && sa > 0.002) {
@@ -1497,7 +1552,7 @@ class CerebroEngine {
         const ddx = Math.sin(t * d.freq         + d.phase) * DUST_AMP;
         const ddy = Math.sin(t * d.freq * 1.07  + d.phase + 1.3) * DUST_AMP * 0.85;
         const ddz = Math.sin(t * d.freq * 0.93  + d.phase + 2.7) * DUST_AMP * 0.9;
-        const p = this.projectFast(d.x + ddx, d.y + ddy, d.z + ddz, m);
+        const p = this.projectFast((d.x + ddx) * sp, (d.y + ddy) * sp, (d.z + ddz) * sp, m);
         const depthMul = 1 - clamp((p.depth + 200) / 600, 0, 0.45);
         ctx.globalAlpha = dustAlphaBase * depthMul;
         const r = 9 * k;
@@ -1507,13 +1562,38 @@ class CerebroEngine {
       ctx.globalCompositeOperation = 'source-over';
     }
 
+    // ── Shape clouds (galaxy/constellation/tree) ───────────────────
+    const shapeDefs = [
+      { pts: this.shapeClouds.galaxy,        alpha: galaxyAlpha, sprite: this.glowGalaxy,        r: 16 },
+      { pts: this.shapeClouds.constellation, alpha: constAlpha,  sprite: this.glowConstellation, r: 11 },
+      { pts: this.shapeClouds.tree,          alpha: treeAlpha,   sprite: this.glowTree,           r: 13 },
+    ];
+    for (const { pts, alpha, sprite, r: baseR } of shapeDefs) {
+      if (!pts.length || alpha < 0.002) continue;
+      ctx.globalCompositeOperation = 'lighter';
+      const cloudBase = 0.030 * this.options.glow * alpha;
+      for (let i = 0; i < pts.length; i++) {
+        const d = pts[i];
+        const ddx = Math.sin(t * d.freq         + d.phase) * DUST_AMP * 0.5;
+        const ddy = Math.sin(t * d.freq * 1.07  + d.phase + 1.3) * DUST_AMP * 0.4;
+        const ddz = Math.sin(t * d.freq * 0.93  + d.phase + 2.7) * DUST_AMP * 0.5;
+        const p = this.projectFast((d.x + ddx) * sp, (d.y + ddy) * sp, (d.z + ddz) * sp, m);
+        const depthMul = 1 - clamp((p.depth + 200) / 600, 0, 0.45);
+        ctx.globalAlpha = cloudBase * depthMul;
+        const pr = baseR * k;
+        ctx.drawImage(sprite, p.sx - pr, p.sy - pr, pr * 2, pr * 2);
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
     // ── Project nodes ──────────────────────────────────────────────
     const proj = this._proj;
     for (let i = 0; i < this.nodes.length; i++) {
       const n = this.nodes[i];
-      const bx = n.ox + (n.tx - n.ox) * mt;
-      const by = n.oy + (n.ty - n.oy) * mt;
-      const bz = n.oz + (n.tz - n.oz) * mt;
+      const bx = (n.ox + (n.tx - n.ox) * mt) * sp;
+      const by = (n.oy + (n.ty - n.oy) * mt) * sp;
+      const bz = (n.oz + (n.tz - n.oz) * mt) * sp;
       const wx = bx + Math.sin(t * n.freq + n.phase) * n.amp;
       const wy = by + Math.sin(t * n.freq * 1.07 + n.phase + 1.3) * n.amp * 0.85;
       const wz = bz + Math.sin(t * n.freq * 0.93 + n.phase + 2.7) * n.amp * 0.9;
@@ -1561,7 +1641,7 @@ class CerebroEngine {
             pulseAmp = envelope * (1 - age / 1.8) * 8;
           }
         }
-        const p = this.projectFast(pt.x + ssx, pt.y + ssy + pulseAmp, pt.z + ssz, m);
+        const p = this.projectFast((pt.x + ssx) * sp, (pt.y + ssy + pulseAmp) * sp, (pt.z + ssz) * sp, m);
         if (p.depth <= 0) continue;
         const depthDim = clamp(1 - p.depth / 480, 0.28, 1.0);
         ctx.globalAlpha = sBase * depthDim;
@@ -1627,11 +1707,13 @@ class CerebroEngine {
         color = `rgba(110, 150, 210, ${alpha})`;
       }
       ctx.strokeStyle = color;
-      ctx.lineWidth = (hover ? 0.9 : l.isVaultLink ? 0.75 : 0.55) + aAct * 1.2;
+      ctx.lineWidth = ((hover ? 0.9 : l.isVaultLink ? 0.75 : 0.55) + aAct * 1.2) * this.options.edgeWidth;
+      ctx.globalAlpha = this.options.edgeOpacity;
       ctx.beginPath();
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     // ── Nodes glow pass (additive) ─────────────────────────────────
@@ -1645,7 +1727,8 @@ class CerebroEngine {
       const n = this.nodes[i];
       const sx = proj[i*3], sy = proj[i*3 + 1], depth = proj[i*3 + 2];
       const depthFade = clamp(0.85 - depth / 700, 0.3, 1.0);
-      const baseSize = 4 + n.weight * 4 + (n.hub ? 3 : 0) + (n.isVault ? 2 : 0);
+      const metricBoost = Math.log1p(n.useCount || 0) * 0.4;
+      const baseSize = 4 + n.weight * 4 + (n.hub ? 3 : 0) + (n.isVault ? 2 : 0) + metricBoost;
       const a = act[i];
       const hover = isHovering && hoverSet.has(i);
       const hoverBoost = hover ? 1.4 : (isHovering ? 0.4 : 1.0);
@@ -1687,7 +1770,7 @@ class CerebroEngine {
       const n = this.nodes[i];
       const sx = proj[i*3], sy = proj[i*3 + 1], depth = proj[i*3 + 2];
       const depthFade = clamp(0.7 - depth / 800, 0.35, 1.0);
-      const baseSize = 1.4 + n.weight * 1.6 + (n.hub ? 0.9 : 0) + (n.isVault ? 0.6 : 0);
+      const baseSize = 1.4 + n.weight * 1.6 + (n.hub ? 0.9 : 0) + (n.isVault ? 0.6 : 0) + Math.log1p(n.useCount || 0) * 0.15;
       const a = act[i];
       const hover = isHovering && hoverSet.has(i);
 
@@ -1762,13 +1845,13 @@ class CerebroEngine {
     ctx.globalCompositeOperation = 'source-over';
 
     // ── Surface front ──────────────────────────────────────────────
-    if (this.surface.length) {
+    if (this.surface.length && sa > 0.002) {
       ctx.globalCompositeOperation = 'lighter';
       const spr  = this.surfaceSprite;
-      const sBase = 0.032 * this.options.glow;
+      const sBase = 0.032 * this.options.glow * sa;
       const sprR  = 20 * k;
       for (const pt of this.surface) {
-        const p = this.projectFast(pt.x, pt.y, pt.z, m);
+        const p = this.projectFast(pt.x * sp, pt.y * sp, pt.z * sp, m);
         if (p.depth > 0) continue;
         const frontBoost = clamp(1 + (-p.depth) / 280, 1.0, 1.7);
         ctx.globalAlpha = Math.min(1, sBase * frontBoost);
@@ -1804,6 +1887,20 @@ class CerebroEngine {
 
   setSpeed(v) { this.options.speed = v; }
   setGlow(v)  { this.options.glow = v; }
+  setMetrics(map) {
+    this.nodeMetrics = map;
+    for (const n of this.nodes) n.useCount = (map[n.label]?.count) ?? 0;
+  }
+  set2D(on) { this.mode2D = on; }
+  setSpread(v) { this.options.spread = v; }
+  setTheme(name) {
+    const p = (typeof THEMES !== 'undefined' && THEMES[name]) ? THEMES[name] : THEMES.default;
+    for (const [cat, col] of Object.entries(p)) {
+      CAT_COLOR[cat] = col;
+      if (this.glowSprites[cat]) this.glowSprites[cat] = makeGlowSprite(col);
+    }
+    this.glowHot = makeGlowSprite('#ffffff');
+  }
 
   // ── Inject session nodes (engrams) from sessions.json ───────────────
   injectSessionNodes(sessions) {
@@ -1979,13 +2076,16 @@ function Tooltip({ node, pos }) {
       )}
       <div className="tooltip-meta" style={{ marginTop: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span><i /> {region}</span>
-        {node.md && <span style={{ color: '#4cc3ff', opacity: 0.7, fontSize: '10px', letterSpacing: '0.02em' }}>↗ ler</span>}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {node.useCount > 0 && <span style={{ color: '#6b7593', fontSize: '10px' }}>ativado {node.useCount}×</span>}
+          {node.md && <span style={{ color: '#4cc3ff', opacity: 0.7, fontSize: '10px', letterSpacing: '0.02em' }}>↗ ler</span>}
+        </div>
       </div>
     </div>
   );
 }
 
-function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setAutoRotate, onTrigger, onView, shape, setShape }) {
+function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setAutoRotate, onTrigger, onView, shape, setShape, mode2D, setMode2D, spread, setSpread, edgeWidth, setEdgeWidth, edgeOpacity, setEdgeOpacity, theme, setTheme }) {
   const [open, setOpen] = useState(true);
   return (
     <div className={`panel ${open ? '' : 'collapsed'}`}>
@@ -2042,6 +2142,11 @@ function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setA
           <div className={`toggle ${autoRotate ? 'on' : ''}`} onClick={() => setAutoRotate(v => !v)} role="switch" aria-checked={autoRotate} />
         </div>
 
+        <div className="toggle-row">
+          <span>modo 2D</span>
+          <div className={`toggle ${mode2D ? 'on' : ''}`} onClick={() => setMode2D(v => !v)} role="switch" aria-checked={mode2D} />
+        </div>
+
         <div className="divider" />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -2069,6 +2174,31 @@ function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setA
           <span>auto-pulso</span>
           <div className={`toggle ${auto ? 'on' : ''}`} onClick={() => setAuto(v => !v)} role="switch" aria-checked={auto} />
         </div>
+
+        <div className="divider" />
+
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: '11px', color: 'var(--dim)', userSelect: 'none', paddingBottom: 6 }}>Estilo ▾</summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+            <Slider label="Spread"    value={spread}      min={0.4} max={2.0} step={0.05} onChange={setSpread} />
+            <Slider label="Arestas"   value={edgeWidth}   min={0.2} max={3.0} step={0.1}  onChange={setEdgeWidth} />
+            <Slider label="Opac. ar." value={edgeOpacity} min={0.0} max={1.0} step={0.05} onChange={setEdgeOpacity} />
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+              {['default','neon','pastel','mono'].map(t => (
+                React.createElement('button', {
+                  key: t,
+                  onClick: () => setTheme(t),
+                  style: {
+                    fontSize: '10px', padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
+                    background: theme === t ? 'var(--accent)' : 'transparent',
+                    color: theme === t ? '#0b0f19' : 'var(--dim)',
+                    border: `1px solid ${theme === t ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
+                  },
+                }, t)
+              ))}
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -2231,6 +2361,7 @@ function App() {
   const [auto, setAuto] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [shape, setShape] = useState('brain');
+  const [mode2D, setMode2D] = useState(false);
   const [bridge, setBridge] = useState({ connected: false, lastNode: null });
   const [selectedNode, setSelectedNode] = useState(null);
   // 'loading' | 'setup' | 'ready'
@@ -2270,6 +2401,8 @@ function App() {
     };
     eng.build(graphData);
     eng.start();
+    fetch(`http://localhost:${BRIDGE_PORT}/metrics`)
+      .then(r => r.json()).then(m => eng.setMetrics(m)).catch(() => {});
     const initialPulse = setTimeout(() => eng.triggerThought(), 1100);
 
     fetch(`http://localhost:${BRIDGE_PORT}/sessions`)
@@ -2316,10 +2449,21 @@ function App() {
     };
   }, [appState]);
 
+  const [autoThoughtMs, setAutoThoughtMs] = useState(2400);
+  const [spread, setSpread] = useState(1.0);
+  const [edgeWidth, setEdgeWidth] = useState(1.0);
+  const [edgeOpacity, setEdgeOpacity] = useState(1.0);
+  const [theme, setTheme] = useState('default');
+
   useEffect(() => { engineRef.current?.setSpeed(speed); }, [speed]);
   useEffect(() => { engineRef.current?.setGlow(glow); }, [glow]);
   useEffect(() => { engineRef.current?.setAutoRotate(autoRotate); }, [autoRotate]);
   useEffect(() => { engineRef.current?.morphTo(shape); }, [shape]);
+  useEffect(() => { engineRef.current?.set2D(mode2D); }, [mode2D]);
+  useEffect(() => { engineRef.current?.setSpread(spread); }, [spread]);
+  useEffect(() => { if (engineRef.current) engineRef.current.options.edgeWidth = edgeWidth; }, [edgeWidth]);
+  useEffect(() => { if (engineRef.current) engineRef.current.options.edgeOpacity = edgeOpacity; }, [edgeOpacity]);
+  useEffect(() => { engineRef.current?.setTheme(theme); }, [theme]);
 
   const onView = useCallback((kind) => {
     const eng = engineRef.current;
@@ -2333,21 +2477,41 @@ function App() {
     }
   }, []);
 
+  // Poll /activity every 4s — ajusta intervalo do auto-pulso com a taxa real de uso
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetch(`http://localhost:${BRIDGE_PORT}/activity`)
+        .then(r => r.json())
+        .then(({ eventsPerSec }) => {
+          // 0 ev/s → 5000ms | 5+ ev/s → 600ms
+          setAutoThoughtMs(Math.round(5000 - Math.min(eventsPerSec, 5) / 5 * 4400));
+        }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (!auto) return;
-    const id = setInterval(() => { engineRef.current?.triggerThought(); }, 2400 / speed);
+    const id = setInterval(() => { engineRef.current?.triggerThought(null, 3, true); }, autoThoughtMs);
     return () => clearInterval(id);
-  }, [auto, speed]);
+  }, [auto, autoThoughtMs]);
 
   useEffect(() => {
     const onKey = (e) => {
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement)) {
         e.preventDefault();
-        engineRef.current?.triggerThought();
+        if (!e.repeat) engineRef.current?.spaceDown();
       }
     };
+    const onKeyUp = (e) => {
+      if (e.code === 'Space') engineRef.current?.spaceUp();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, []);
 
   const onTrigger = useCallback(() => { engineRef.current?.triggerThought(); }, []);
@@ -2364,6 +2528,11 @@ function App() {
         autoRotate={autoRotate} setAutoRotate={setAutoRotate}
         onTrigger={onTrigger} onView={onView}
         shape={shape} setShape={setShape}
+        mode2D={mode2D} setMode2D={setMode2D}
+        spread={spread} setSpread={setSpread}
+        edgeWidth={edgeWidth} setEdgeWidth={setEdgeWidth}
+        edgeOpacity={edgeOpacity} setEdgeOpacity={setEdgeOpacity}
+        theme={theme} setTheme={setTheme}
       />
       <Tooltip node={hover?.node} pos={hover?.pos || null} />
       <StatusBar stats={stats} bridge={bridge} />
