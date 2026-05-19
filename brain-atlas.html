@@ -884,7 +884,7 @@ function buildBrainSurface(count) {
     const z = (Math.random() - 0.5) * 300;
     if (!isSurfaceShell(x, y, z)) continue;
     if (isInSulcus(x, y, z)) continue;
-    pts.push({ x, y, z });
+    pts.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.15 + Math.random() * 0.25 });
   }
   return pts;
 }
@@ -912,7 +912,7 @@ function buildBrainDust(count) {
     const x = (Math.random() - 0.5) * 560;
     const y = (Math.random() - 0.5) * 540 + 50;
     const z = (Math.random() - 0.5) * 300;
-    if (brainRegion(x, y, z)) dust.push({ x, y, z });
+    if (brainRegion(x, y, z)) dust.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.15 + Math.random() * 0.25 });
   }
   return dust;
 }
@@ -931,6 +931,9 @@ function makeGlowSprite(color, size = 128) {
   ctx.fillRect(0, 0, size, size);
   return c;
 }
+
+const SURF_AMP = 3.5;
+const DUST_AMP = 7.0;
 
 // ──────────────────────────────────────────────────────────────────────────
 // CerebroEngine
@@ -956,6 +959,7 @@ class CerebroEngine {
     this._proj = null;
     this.hoverId = null;
     this.thoughts = [];
+    this.surfacePulse = null;
     this.options = { speed: 1.0, glow: 1.0, nodeCount: 200 };
     this.running = true;
     this.rafId = 0;
@@ -1208,9 +1212,10 @@ class CerebroEngine {
         queue.push(nb);
       }
     }
-    this.thoughts.push({ startedAt: performance.now(), dist, maxDist, root: root.id });
     const now = performance.now();
+    this.thoughts.push({ startedAt: now, dist, maxDist, root: root.id });
     this.thoughts = this.thoughts.filter(t => now - t.startedAt < 4500);
+    this.surfacePulse = { cx: root.x, cy: root.y, cz: root.z, startedAt: now };
   }
 
   nodeActivation(id, now) {
@@ -1280,7 +1285,10 @@ class CerebroEngine {
       const dustAlphaBase = 0.038 * this.options.glow;
       for (let i = 0; i < this.dust.length; i++) {
         const d = this.dust[i];
-        const p = this.projectFast(d.x, d.y, d.z, m);
+        const ddx = Math.sin(t * d.freq         + d.phase) * DUST_AMP;
+        const ddy = Math.sin(t * d.freq * 1.07  + d.phase + 1.3) * DUST_AMP * 0.85;
+        const ddz = Math.sin(t * d.freq * 0.93  + d.phase + 2.7) * DUST_AMP * 0.9;
+        const p = this.projectFast(d.x + ddx, d.y + ddy, d.z + ddz, m);
         const depthMul = 1 - clamp((p.depth + 200) / 600, 0, 0.45);
         ctx.globalAlpha = dustAlphaBase * depthMul;
         const r = 9 * k;
@@ -1325,8 +1333,23 @@ class CerebroEngine {
       const spr  = this.surfaceSprite;
       const sBase = 0.032 * this.options.glow;
       const sprR  = 20 * k;
+      const pulse = this.surfacePulse;
       for (const pt of this.surface) {
-        const p = this.projectFast(pt.x, pt.y, pt.z, m);
+        const ssx = Math.sin(t * pt.freq         + pt.phase) * SURF_AMP;
+        const ssy = Math.sin(t * pt.freq * 1.07  + pt.phase + 1.3) * SURF_AMP * 0.85;
+        const ssz = Math.sin(t * pt.freq * 0.93  + pt.phase + 2.7) * SURF_AMP * 0.9;
+        let pulseAmp = 0;
+        if (pulse) {
+          const age = (now - pulse.startedAt) / 1000;
+          if (age < 1.8) {
+            const dist = Math.sqrt((pt.x - pulse.cx) ** 2 + (pt.y - pulse.cy) ** 2 + (pt.z - pulse.cz) ** 2);
+            const wavefront = age * 320;
+            const spread = 60;
+            const envelope = Math.exp(-((dist - wavefront) ** 2) / (2 * spread * spread));
+            pulseAmp = envelope * (1 - age / 1.8) * 8;
+          }
+        }
+        const p = this.projectFast(pt.x + ssx, pt.y + ssy + pulseAmp, pt.z + ssz, m);
         if (p.depth <= 0) continue;
         const depthDim = clamp(1 - p.depth / 480, 0.28, 1.0);
         ctx.globalAlpha = sBase * depthDim;
@@ -1334,6 +1357,7 @@ class CerebroEngine {
       }
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
+      if (pulse && (now - pulse.startedAt) / 1000 >= 1.8) this.surfacePulse = null;
     }
 
     // ── Edges ──────────────────────────────────────────────────────
