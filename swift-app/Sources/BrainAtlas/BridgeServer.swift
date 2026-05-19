@@ -60,8 +60,14 @@ actor BridgeServer {
         return dir
     }
 
-    private var configURL: URL { appSupportURL.appendingPathComponent("config.json") }
+    private var configURL: URL   { appSupportURL.appendingPathComponent("config.json") }
     private var sessionsURL: URL { appSupportURL.appendingPathComponent("sessions.json") }
+    private var metricsURL: URL  { appSupportURL.appendingPathComponent("metrics.json") }
+
+    // MARK: Metrics & activity state
+    private struct NodeMetric: Codable { var count: Int; var lastSeen: String }
+    private var nodeMetrics: [String: NodeMetric] = [:]
+    private var recentEventTimestamps: [Date] = []
 
     // MARK: - Public API
 
@@ -91,6 +97,7 @@ actor BridgeServer {
 
             newListener.start(queue: listenerQueue)
             isRunning = true
+            loadMetrics()
             startKeepAlive()
             print("[BridgeServer] Listening on http://localhost:\(resolvedPort)")
         } catch {
@@ -221,6 +228,12 @@ actor BridgeServer {
         case ("GET", "/health"):
             handleGetHealth(connection: connection)
 
+        case ("GET", "/metrics"):
+            handleGetMetrics(connection: connection)
+
+        case ("GET", "/activity"):
+            handleGetActivity(connection: connection)
+
         case ("GET", let p) where p.hasPrefix("/md"):
             handleGetMarkdown(path: path, connection: connection)
 
@@ -344,6 +357,22 @@ actor BridgeServer {
             broadcast("data: \(jsonString)\n\n")
         }
 
+        // Track metrics
+        let now = Date()
+        recentEventTimestamps.append(now)
+        recentEventTimestamps = recentEventTimestamps.filter { now.timeIntervalSince($0) < 30 }
+
+        if let node = dict["node"] as? String, !node.isEmpty {
+            let iso = ISO8601DateFormatter().string(from: now)
+            if nodeMetrics[node] != nil {
+                nodeMetrics[node]!.count += 1
+                nodeMetrics[node]!.lastSeen = iso
+            } else {
+                nodeMetrics[node] = NodeMetric(count: 1, lastSeen: iso)
+            }
+            persistMetrics()
+        }
+
         sendJSON(to: connection, status: 200, body: #"{"ok":true}"#)
     }
 
@@ -400,6 +429,31 @@ actor BridgeServer {
             "Content-Length: \(data.count)"
         ]
         sendRaw(to: connection, status: "200 OK", headers: headers, body: data)
+    }
+
+    private func handleGetMetrics(connection: NWConnection) {
+        let data = (try? JSONEncoder().encode(nodeMetrics)) ?? Data("{}".utf8)
+        sendJSONData(to: connection, data: data)
+    }
+
+    private func handleGetActivity(connection: NWConnection) {
+        let cutoff = Date().addingTimeInterval(-30)
+        let recent = recentEventTimestamps.filter { $0 > cutoff }
+        let evPerSec = Double(recent.count) / 30.0
+        let body = "{\"eventsPerSec\":\(String(format: "%.2f", evPerSec)),\"recentCount\":\(recent.count)}"
+        sendJSON(to: connection, status: 200, body: body)
+    }
+
+    private func loadMetrics() {
+        guard FileManager.default.fileExists(atPath: metricsURL.path),
+              let data = try? Data(contentsOf: metricsURL),
+              let loaded = try? JSONDecoder().decode([String: NodeMetric].self, from: data) else { return }
+        nodeMetrics = loaded
+    }
+
+    private func persistMetrics() {
+        guard let data = try? JSONEncoder().encode(nodeMetrics) else { return }
+        try? data.write(to: metricsURL, options: .atomic)
     }
 
     private func sendPlainText(to connection: NWConnection, status: Int, body: String) {
