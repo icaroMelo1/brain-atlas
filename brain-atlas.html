@@ -884,7 +884,7 @@ function buildBrainSurface(count) {
     const z = (Math.random() - 0.5) * 300;
     if (!isSurfaceShell(x, y, z)) continue;
     if (isInSulcus(x, y, z)) continue;
-    pts.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.15 + Math.random() * 0.25 });
+    pts.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.25 + Math.random() * 0.35 });
   }
   return pts;
 }
@@ -912,7 +912,7 @@ function buildBrainDust(count) {
     const x = (Math.random() - 0.5) * 560;
     const y = (Math.random() - 0.5) * 540 + 50;
     const z = (Math.random() - 0.5) * 300;
-    if (brainRegion(x, y, z)) dust.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.15 + Math.random() * 0.25 });
+    if (brainRegion(x, y, z)) dust.push({ x, y, z, phase: Math.random() * Math.PI * 2, freq: 0.25 + Math.random() * 0.35 });
   }
   return dust;
 }
@@ -932,8 +932,121 @@ function makeGlowSprite(color, size = 128) {
   return c;
 }
 
-const SURF_AMP = 3.5;
-const DUST_AMP = 7.0;
+const SURF_AMP = 9.0;
+const DUST_AMP = 18.0;
+
+// ──────────────────────────────────────────────────────────────────────────
+// Shape Layout Functions
+// ──────────────────────────────────────────────────────────────────────────
+
+function layoutGalaxy(nodes) {
+  const out = [];
+  const hubs    = nodes.filter(n => !n.isSatellite && n.hub);
+  const vaults  = nodes.filter(n => !n.isSatellite && !n.hub);
+  const CY = 200; // disc center Y (brain coords)
+
+  // Hubs at galactic center — small radii, tight cluster
+  hubs.forEach((n, i) => {
+    const angle = (i / Math.max(hubs.length, 1)) * Math.PI * 2 + n.phase;
+    const r = 20 + (i / Math.max(hubs.length, 1)) * 55;
+    out.push({ id: n.id, x: Math.cos(angle) * r, y: CY + (Math.random() - 0.5) * 22, z: Math.sin(angle) * r * 0.35 });
+  });
+
+  // Vault nodes — spiral arms
+  vaults.forEach((n, i) => {
+    const arms = 3;
+    const arm  = i % arms;
+    const t    = i / Math.max(vaults.length, 1);
+    const angle = (arm / arms) * Math.PI * 2 + t * Math.PI * 3.2 + n.phase * 0.4;
+    const r = 80 + t * 145;
+    out.push({ id: n.id, x: Math.cos(angle) * r, y: CY + (Math.random() - 0.5) * 32, z: Math.sin(angle) * r * 0.38 });
+  });
+
+  // Satellites orbit their parent
+  const posMap = {};
+  for (const o of out) posMap[o.id] = o;
+  nodes.filter(n => n.isSatellite).forEach(n => {
+    const par = posMap[n.parentId];
+    if (!par) { out.push({ id: n.id, x: 0, y: CY, z: 0 }); return; }
+    const angle = n.phase;
+    const r = 32 + Math.random() * 28;
+    out.push({ id: n.id, x: par.x + Math.cos(angle) * r, y: par.y + (Math.random() - 0.5) * 18, z: par.z + Math.sin(angle) * r * 0.5 });
+  });
+
+  return out;
+}
+
+function layoutConstellation(nodes) {
+  const out = [];
+  const CAT_LIST = ['dsg', 'cast', 'skill', 'agent', 'mcp'];
+  const CY = 200;
+
+  // Fibonacci sphere — evenly distribute on sphere surface
+  const nonSat = nodes.filter(n => !n.isSatellite);
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  nonSat.forEach((n, i) => {
+    const y01 = i / Math.max(nonSat.length - 1, 1);
+    const yS  = 1 - y01 * 2;
+    const r   = n.hub ? 90 + Math.random() * 40 : 155 + Math.random() * 75;
+    const theta = Math.acos(clamp(yS, -1, 1));
+    const phi   = golden * i + n.phase * 0.2;
+    out.push({
+      id: n.id,
+      x: r * Math.sin(theta) * Math.cos(phi),
+      y: CY + r * Math.cos(theta) * 0.7,
+      z: r * Math.sin(theta) * Math.sin(phi) * 0.65,
+    });
+  });
+
+  // Satellites cluster around their parent with small offset
+  const posMap = {};
+  for (const o of out) posMap[o.id] = o;
+  nodes.filter(n => n.isSatellite).forEach(n => {
+    const par = posMap[n.parentId];
+    if (!par) { out.push({ id: n.id, x: 0, y: CY, z: 0 }); return; }
+    const angle = n.phase;
+    const r = 25 + Math.random() * 30;
+    out.push({ id: n.id, x: par.x + Math.cos(angle) * r, y: par.y + (Math.random() - 0.5) * 25, z: par.z + Math.sin(angle) * r });
+  });
+
+  return out;
+}
+
+function layoutTree(nodes) {
+  const out = [];
+  const CAT_LIST = ['dsg', 'cast', 'skill', 'agent', 'mcp'];
+  const hubs   = nodes.filter(n => !n.isSatellite && n.hub);
+  const vaults = nodes.filter(n => !n.isSatellite && !n.hub);
+
+  // Hubs — trunk, spread by weight, near center X
+  hubs.sort((a, b) => b.weight - a.weight);
+  hubs.forEach((n, i) => {
+    const x = (i - (hubs.length - 1) / 2) * 60;
+    out.push({ id: n.id, x, y: 80 + i * 28, z: (Math.random() - 0.5) * 40 });
+  });
+
+  // Vault nodes — branches, spread by category (X band) and index (Z)
+  const catBands = { dsg: -200, cast: -100, skill: 0, agent: 100, mcp: 200 };
+  vaults.forEach((n, i) => {
+    const bandX = catBands[n.category] ?? 0;
+    const spread = 55;
+    const catIdx = vaults.filter(v => v.category === n.category).indexOf(n);
+    const total  = vaults.filter(v => v.category === n.category).length;
+    const xOff   = (catIdx / Math.max(total - 1, 1) - 0.5) * spread * 2;
+    out.push({ id: n.id, x: bandX + xOff, y: 220 + (n.weight > 0.3 ? 0 : 50) + Math.random() * 60, z: (Math.random() - 0.5) * 70 });
+  });
+
+  // Satellites hang below their parent
+  const posMap = {};
+  for (const o of out) posMap[o.id] = o;
+  nodes.filter(n => n.isSatellite).forEach(n => {
+    const par = posMap[n.parentId];
+    if (!par) { out.push({ id: n.id, x: 0, y: 340, z: 0 }); return; }
+    out.push({ id: n.id, x: par.x + (Math.random() - 0.5) * 50, y: par.y + 65 + Math.random() * 40, z: par.z + (Math.random() - 0.5) * 40 });
+  });
+
+  return out;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // CerebroEngine
@@ -960,6 +1073,11 @@ class CerebroEngine {
     this.hoverId = null;
     this.thoughts = [];
     this.surfacePulse = null;
+    this.morphT        = 0;
+    this.morphDir      = 0;
+    this.morphDur      = 1400;
+    this.morphStart    = 0;
+    this.currentShape  = 'brain';
     this.options = { speed: 1.0, glow: 1.0, nodeCount: 200 };
     this.running = true;
     this.rafId = 0;
@@ -1009,6 +1127,8 @@ class CerebroEngine {
     this.adjacency = adjacency;
     this.nameToId = nameToId;
     this.thoughts = [];
+    this.morphT = 0; this.morphDir = 0; this.currentShape = 'brain';
+    for (const n of nodes) { n.ox = n.x; n.oy = n.y; n.oz = n.z; n.tx = n.x; n.ty = n.y; n.tz = n.z; }
     this._proj = new Float32Array(nodes.length * 3);
     this.dust = buildBrainDust(900);
     this.surface = buildBrainSurface(2200);
@@ -1178,6 +1298,23 @@ class CerebroEngine {
   }
   setAutoRotate(on) { this.camera.autoRotate = !!on; }
 
+  morphTo(shape) {
+    if (shape === this.currentShape || !this.nodes.length) return;
+    const targets = shape === 'brain'
+      ? this.nodes.map(n => ({ id: n.id, x: n.ox, y: n.oy, z: n.oz }))
+      : shape === 'galaxy'        ? layoutGalaxy(this.nodes)
+      : shape === 'constellation' ? layoutConstellation(this.nodes)
+      : layoutTree(this.nodes);
+    for (const t of targets) {
+      const n = this.nodes[t.id];
+      if (n) { n.tx = t.x; n.ty = t.y; n.tz = t.z; }
+    }
+    this.currentShape = shape;
+    this.morphT = 0;
+    this.morphDir = 1;
+    this.morphStart = performance.now();
+  }
+
   // maxDepth: limita BFS a N hops (Infinity = comportamento original do botão)
   // vaultOnly: quando true, ignora neurônios de fundo (category === 'bg') no BFS
   triggerThought(rootId, maxDepth = Infinity, vaultOnly = false) {
@@ -1279,10 +1416,20 @@ class CerebroEngine {
     ctx.fillStyle = '#0B0F19';
     ctx.fillRect(0, 0, w, h);
 
+    // ── Morph tick ─────────────────────────────────────────────────
+    if (this.morphDir !== 0) {
+      const elapsed = now - this.morphStart;
+      const raw = Math.min(1, elapsed / this.morphDur);
+      const e = raw < 0.5 ? 4 * raw ** 3 : 1 - (-2 * raw + 2) ** 3 / 2;
+      this.morphT = e;
+      if (raw >= 1) { this.morphT = 1; this.morphDir = 0; }
+    }
+
     // ── Brain dust ─────────────────────────────────────────────────
-    if (this.dust.length) {
+    const surfaceVisible = 1 - this.morphT;
+    if (this.dust.length && surfaceVisible > 0.002) {
       ctx.globalCompositeOperation = 'lighter';
-      const dustAlphaBase = 0.038 * this.options.glow;
+      const dustAlphaBase = 0.038 * this.options.glow * surfaceVisible;
       for (let i = 0; i < this.dust.length; i++) {
         const d = this.dust[i];
         const ddx = Math.sin(t * d.freq         + d.phase) * DUST_AMP;
@@ -1300,11 +1447,15 @@ class CerebroEngine {
 
     // ── Project nodes ──────────────────────────────────────────────
     const proj = this._proj;
+    const mt = this.morphT;
     for (let i = 0; i < this.nodes.length; i++) {
       const n = this.nodes[i];
-      const wx = n.x + Math.sin(t * n.freq + n.phase) * n.amp;
-      const wy = n.y + Math.sin(t * n.freq * 1.07 + n.phase + 1.3) * n.amp * 0.85;
-      const wz = n.z + Math.sin(t * n.freq * 0.93 + n.phase + 2.7) * n.amp * 0.9;
+      const bx = n.ox + (n.tx - n.ox) * mt;
+      const by = n.oy + (n.ty - n.oy) * mt;
+      const bz = n.oz + (n.tz - n.oz) * mt;
+      const wx = bx + Math.sin(t * n.freq + n.phase) * n.amp;
+      const wy = by + Math.sin(t * n.freq * 1.07 + n.phase + 1.3) * n.amp * 0.85;
+      const wz = bz + Math.sin(t * n.freq * 0.93 + n.phase + 2.7) * n.amp * 0.9;
       const p = this.projectFast(wx, wy, wz, m);
       proj[i*3 + 0] = p.sx;
       proj[i*3 + 1] = p.sy;
@@ -1328,10 +1479,10 @@ class CerebroEngine {
     }
 
     // ── Surface back ───────────────────────────────────────────────
-    if (this.surface.length) {
+    if (this.surface.length && surfaceVisible > 0.002) {
       ctx.globalCompositeOperation = 'lighter';
       const spr  = this.surfaceSprite;
-      const sBase = 0.032 * this.options.glow;
+      const sBase = 0.032 * this.options.glow * surfaceVisible;
       const sprR  = 20 * k;
       const pulse = this.surfacePulse;
       for (const pt of this.surface) {
@@ -1773,7 +1924,7 @@ function Tooltip({ node, pos }) {
   );
 }
 
-function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setAutoRotate, onTrigger, onView }) {
+function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setAutoRotate, onTrigger, onView, shape, setShape }) {
   const [open, setOpen] = useState(true);
   return (
     <div className={`panel ${open ? '' : 'collapsed'}`}>
@@ -1828,6 +1979,22 @@ function Panel({ speed, setSpeed, glow, setGlow, auto, setAuto, autoRotate, setA
         <div className="toggle-row">
           <span>auto-rotação</span>
           <div className={`toggle ${autoRotate ? 'on' : ''}`} onClick={() => setAutoRotate(v => !v)} role="switch" aria-checked={autoRotate} />
+        </div>
+
+        <div className="divider" />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span className="ctl-label" style={{ marginBottom: 2 }}>Forma</span>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {[['brain','🧠','Brain'],['galaxy','🌌','Galaxy'],['constellation','✦','Const.'],['tree','🌿','Tree']].map(([s, icon, label]) => (
+              React.createElement('button', {
+                key: s,
+                className: 'view-btn' + (shape === s ? ' active' : ''),
+                onClick: () => setShape(s),
+                style: shape === s ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {},
+              }, React.createElement('span', null, icon + ' ' + label))
+            ))}
+          </div>
         </div>
 
         <div className="divider" />
@@ -2002,6 +2169,7 @@ function App() {
   const [glow, setGlow] = useState(1.0);
   const [auto, setAuto] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [shape, setShape] = useState('brain');
   const [bridge, setBridge] = useState({ connected: false, lastNode: null });
   const [selectedNode, setSelectedNode] = useState(null);
   // 'loading' | 'setup' | 'ready'
@@ -2090,6 +2258,7 @@ function App() {
   useEffect(() => { engineRef.current?.setSpeed(speed); }, [speed]);
   useEffect(() => { engineRef.current?.setGlow(glow); }, [glow]);
   useEffect(() => { engineRef.current?.setAutoRotate(autoRotate); }, [autoRotate]);
+  useEffect(() => { engineRef.current?.morphTo(shape); }, [shape]);
 
   const onView = useCallback((kind) => {
     const eng = engineRef.current;
@@ -2133,6 +2302,7 @@ function App() {
         auto={auto} setAuto={setAuto}
         autoRotate={autoRotate} setAutoRotate={setAutoRotate}
         onTrigger={onTrigger} onView={onView}
+        shape={shape} setShape={setShape}
       />
       <Tooltip node={hover?.node} pos={hover?.pos || null} />
       <StatusBar stats={stats} bridge={bridge} />
