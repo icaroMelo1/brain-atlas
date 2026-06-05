@@ -2380,7 +2380,13 @@ function App() {
           .then(r => r.json())
           .then(data => { setGraphData(data); setAppState('ready'); });
       })
-      .catch(() => setAppState('setup'));
+      .catch(() => {
+        // Sem bridge (deploy estático) → carrega o nodes.json embutido
+        fetch('./nodes.json')
+          .then(r => r.json())
+          .then(data => { setGraphData(data); setAppState('ready'); })
+          .catch(() => setAppState('setup'));
+      });
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
